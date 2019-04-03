@@ -163,6 +163,17 @@ mod test {
     use super::*;
 
     #[test]
+    fn parse_langs() {
+        assert_eq!(&parse_lang(*AUTODETECT), &*AUTODETECT);
+        assert_eq!(&parse_lang("rust"), LANGUAGES.get_key("rust").unwrap());
+        assert_eq!(&parse_lang("c"), LANGUAGES.get_key("c").unwrap());
+        assert_eq!(&parse_lang("html"), LANGUAGES.get_key("html").unwrap());
+        assert_eq!(&parse_lang("python"), LANGUAGES.get_key("python").unwrap());
+        assert_eq!(&parse_lang(""), &*AUTODETECT);
+        assert_eq!(&parse_lang("asdf"), &*AUTODETECT);
+    }
+
+    #[test]
     fn parse_durations() {
         assert_eq!(parse_duration("1m").unwrap(), *ONE_MINUTE);
         assert_eq!(
