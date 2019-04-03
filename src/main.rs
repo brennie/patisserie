@@ -1,9 +1,13 @@
-use std::{path::PathBuf, time::Duration};
+use std::fs::File;
+use std::io::{stdin, Read};
+use std::path::{Path, PathBuf};
+use std::time::Duration;
 
 use failure::{err_msg, format_err, Error};
 use lazy_static::lazy_static;
+use reqwest::{Client, Url};
+use serde::Deserialize;
 use structopt::StructOpt;
-use url::Url;
 
 include!(concat!(env!("OUT_DIR"), "/lang.codegen.rs"));
 
@@ -63,6 +67,13 @@ struct Options {
     ///
     /// If not provided, the file will be read from standard input.
     path: Option<PathBuf>,
+}
+
+#[derive(Deserialize)]
+#[serde(untagged)]
+enum Response {
+    Error { error_msg: String },
+    Paste { url: String },
 }
 
 fn parse_lang(lang: &str) -> &'static str {
@@ -150,12 +161,33 @@ fn generate_url(options: &Options) -> Url {
     url
 }
 
-fn main() {
-    let options = Options::from_args();
-    println!("{:?}", options);
+fn read_file(path: Option<&Path>) -> Result<String, Error> {
+    let mut f: Box<dyn Read> = match path {
+        Some(path) => Box::new(File::open(path)?),
+        None => Box::new(stdin()),
+    };
+    let mut buffer = String::new();
+    f.read_to_string(&mut buffer)?;
 
+    Ok(buffer)
+}
+
+fn main() -> Result<(), Error> {
+    let options = Options::from_args();
     let url = generate_url(&options);
-    println!("url = {:?}", url);
+    let body = read_file(options.path.as_ref().map(|p| &**p))?;
+
+    let client = Client::new();
+    let rsp: Response = client.post(url).body(body).send()?.json()?;
+
+    match rsp {
+        Response::Error { error_msg } => return Err(err_msg(error_msg)),
+        Response::Paste { url } => {
+            println!("{}", url);
+        }
+    }
+
+    Ok(())
 }
 
 #[cfg(test)]
