@@ -3,6 +3,7 @@ use std::{path::PathBuf, time::Duration};
 use failure::{err_msg, format_err, Error};
 use lazy_static::lazy_static;
 use structopt::StructOpt;
+use url::Url;
 
 include!(concat!(env!("OUT_DIR"), "/lang.codegen.rs"));
 
@@ -15,6 +16,7 @@ lazy_static! {
     static ref ONE_MONTH: Duration = ONE_WEEK.checked_mul(4).unwrap();
     static ref ONE_YEAR: Duration = ONE_DAY.checked_mul(365).unwrap();
     static ref ONE_HUNDRED_YEARS: Duration = ONE_YEAR.checked_mul(100).unwrap();
+    static ref PASTERY_URL: &'static str = "https://www.pastery.net/api/paste/";
 }
 
 #[derive(Debug, StructOpt)]
@@ -46,6 +48,8 @@ struct Options {
     duration: Duration,
 
     /// The title of the paste.
+    ///
+    /// If not provided, the name of the file will be used instead.
     #[structopt(long = "title")]
     title: Option<String>,
 
@@ -112,7 +116,246 @@ fn parse_duration(s: &str) -> Result<Duration, Error> {
     }
 }
 
+fn generate_url(options: &Options) -> Url {
+    let mut url = Url::parse(*PASTERY_URL).unwrap();
+    {
+        let mut query_pairs = url.query_pairs_mut();
+
+        let duration_in_min = options.duration.as_secs() / 60;
+
+        query_pairs
+            .append_pair("api_key", &options.api_key)
+            .append_pair("language", options.lang)
+            .append_pair("duration", &duration_in_min.to_string());
+
+        let max_views = options.max_views.unwrap_or(0);
+        if max_views > 0 {
+            query_pairs.append_pair("max_views", &max_views.to_string());
+        }
+
+        let maybe_title = match (&options.title, &options.path) {
+            (Some(ref title), _) => Some(title.clone()),
+            (_, Some(ref path)) => path
+                .file_name()
+                .map(std::ffi::OsStr::to_string_lossy)
+                .map(String::from),
+            (_, _) => None,
+        };
+
+        if let Some(title) = maybe_title {
+            query_pairs.append_pair("title", &title);
+        }
+    }
+
+    url
+}
+
 fn main() {
     let options = Options::from_args();
     println!("{:?}", options);
+
+    let url = generate_url(&options);
+    println!("url = {:?}", url);
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn generate_urls() {
+        assert_eq!(
+            generate_url(&Options {
+                api_key: "foo".into(),
+                lang: *AUTODETECT,
+                duration: *ONE_MINUTE,
+                max_views: None,
+                title: None,
+                path: None,
+            })
+            .to_string(),
+            "https://www.pastery.net/api/paste/?api_key=foo&language=autodetect&duration=1"
+        );
+
+        assert_eq!(
+            generate_url(&Options {
+                api_key: "foo".into(),
+                lang: *AUTODETECT,
+                duration: *ONE_HOUR,
+                max_views: None,
+                title: None,
+                path: None,
+            })
+            .to_string(),
+            "https://www.pastery.net/api/paste/?api_key=foo&language=autodetect&duration=60"
+        );
+
+        assert_eq!(
+            generate_url(&Options {
+                api_key: "foo".into(),
+                lang: *AUTODETECT,
+                duration: *ONE_DAY,
+                max_views: None,
+                title: None,
+                path: None,
+            })
+            .to_string(),
+            "https://www.pastery.net/api/paste/?api_key=foo&language=autodetect&duration=1440"
+        );
+
+        assert_eq!(
+            generate_url(&Options {
+                api_key: "foo".into(),
+                lang: *AUTODETECT,
+                duration: *ONE_WEEK,
+                max_views: None,
+                title: None,
+                path: None,
+            })
+            .to_string(),
+            "https://www.pastery.net/api/paste/?api_key=foo&language=autodetect&duration=10080"
+        );
+
+        assert_eq!(
+            generate_url(&Options {
+                api_key: "foo".into(),
+                lang: *AUTODETECT,
+                duration: *ONE_MONTH,
+                max_views: None,
+                title: None,
+                path: None,
+            })
+            .to_string(),
+            "https://www.pastery.net/api/paste/?api_key=foo&language=autodetect&duration=40320"
+        );
+        assert_eq!(
+            generate_url(&Options {
+                api_key: "foo".into(),
+                lang: *AUTODETECT,
+                duration: *ONE_YEAR,
+                max_views: None,
+                title: None,
+                path: None,
+            })
+            .to_string(),
+            "https://www.pastery.net/api/paste/?api_key=foo&language=autodetect&duration=525600"
+        );
+
+        assert_eq!(
+            generate_url(&Options {
+                api_key: "foo".into(),
+                lang: *AUTODETECT,
+                duration: *ONE_HUNDRED_YEARS,
+                max_views: None,
+                title: None,
+                path: None,
+            })
+            .to_string(),
+            "https://www.pastery.net/api/paste/?api_key=foo&language=autodetect&duration=52560000"
+        );
+
+        assert_eq!(
+            generate_url(&Options {
+                api_key: "foo".into(),
+                lang: LANGUAGES.get_key("rust").unwrap(),
+                duration: *ONE_DAY,
+                max_views: None,
+                title: None,
+                path: None,
+            })
+            .to_string(),
+            "https://www.pastery.net/api/paste/?api_key=foo&language=rust&duration=1440"
+        );
+
+        assert_eq!(
+            generate_url(&Options {
+                api_key: "foo".into(),
+                lang: LANGUAGES.get_key("c").unwrap(),
+                duration: *ONE_DAY,
+                max_views: None,
+                title: None,
+                path: None,
+            })
+            .to_string(),
+            "https://www.pastery.net/api/paste/?api_key=foo&language=c&duration=1440"
+        );
+
+        assert_eq!(
+            generate_url(&Options {
+                api_key: "bar".into(),
+                lang: *AUTODETECT,
+                duration: *ONE_DAY,
+                max_views: None,
+                title: None,
+                path: None,
+            })
+            .to_string(),
+            "https://www.pastery.net/api/paste/?api_key=bar&language=autodetect&duration=1440"
+        );
+
+        assert_eq!(
+            generate_url(&Options {
+                api_key: "foo".into(),
+                lang: *AUTODETECT,
+                duration: *ONE_DAY,
+                max_views: Some(0),
+                title: None,
+                path: None,
+            })
+            .to_string(),
+            "https://www.pastery.net/api/paste/?api_key=foo&language=autodetect&duration=1440"
+        );
+
+        assert_eq!(
+            generate_url(&Options {
+                api_key: "foo".into(),
+                lang: *AUTODETECT,
+                duration: *ONE_DAY,
+                max_views: Some(100),
+                title: None,
+                path: None,
+            })
+            .to_string(),
+            "https://www.pastery.net/api/paste/?api_key=foo&language=autodetect&duration=1440&max_views=100"
+        );
+
+        assert_eq!(
+            generate_url(&Options {
+                api_key: "foo".into(),
+                lang: *AUTODETECT,
+                duration: *ONE_DAY,
+                max_views: None,
+                title: Some("foo bar.rs".into()),
+                path: None,
+            })
+            .to_string(),
+            "https://www.pastery.net/api/paste/?api_key=foo&language=autodetect&duration=1440&title=foo+bar.rs"
+        );
+
+        assert_eq!(
+            generate_url(&Options {
+                api_key: "foo".into(),
+                lang: *AUTODETECT,
+                duration: *ONE_DAY,
+                max_views: None,
+                title: Some("foo bar.rs".into()),
+                path: Some(PathBuf::from("foo.rs")),
+            })
+            .to_string(),
+            "https://www.pastery.net/api/paste/?api_key=foo&language=autodetect&duration=1440&title=foo+bar.rs"
+        );
+
+        assert_eq!(
+            generate_url(&Options {
+                api_key: "foo".into(),
+                lang: *AUTODETECT,
+                duration: *ONE_DAY,
+                max_views: None,
+                title: None,
+                path: Some(PathBuf::from("foo").join("bar.rs")),
+            })
+            .to_string(),
+            "https://www.pastery.net/api/paste/?api_key=foo&language=autodetect&duration=1440&title=bar.rs"
+        );
+    }
 }
