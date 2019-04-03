@@ -1,0 +1,8 @@
+[package]
+name = "patisserie"
+version = "0.1.0"
+authors = ["Barret Rennie <barret@brennie.ca>"]
+edition = "2018"
+license = "MIT/Apache-2.0"
+
+[dependencies]
