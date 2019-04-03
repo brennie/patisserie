@@ -163,6 +163,25 @@ mod test {
     use super::*;
 
     #[test]
+    fn parse_durations() {
+        assert_eq!(parse_duration("1m").unwrap(), *ONE_MINUTE);
+        assert_eq!(
+            parse_duration("5m").unwrap(),
+            ONE_MINUTE.checked_mul(5).unwrap()
+        );
+        assert_eq!(parse_duration("1d").unwrap(), *ONE_DAY);
+        assert_eq!(parse_duration("1w").unwrap(), *ONE_WEEK);
+        assert_eq!(parse_duration("1mo").unwrap(), *ONE_MONTH);
+        assert_eq!(parse_duration("1y").unwrap(), *ONE_YEAR);
+        assert_eq!(parse_duration("100y").unwrap(), *ONE_HUNDRED_YEARS);
+
+        assert!(parse_duration("101y").is_err());
+        assert!(parse_duration("m").is_err());
+        assert!(parse_duration("100").is_err());
+        assert!(parse_duration("100j").is_err());
+    }
+
+    #[test]
     fn generate_urls() {
         assert_eq!(
             generate_url(&Options {
