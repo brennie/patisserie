@@ -1,6 +1,7 @@
 use std::fs::File;
 use std::io::{stdin, Read};
 use std::path::{Path, PathBuf};
+use std::process::exit;
 use std::time::Duration;
 
 use failure::{err_msg, format_err, Error};
@@ -172,8 +173,7 @@ fn read_file(path: Option<&Path>) -> Result<String, Error> {
     Ok(buffer)
 }
 
-fn main() -> Result<(), Error> {
-    let options = Options::from_args();
+fn upload_paste(options: Options) -> Result<String, Error> {
     let url = generate_url(&options);
     let body = read_file(options.path.as_ref().map(|p| &**p))?;
 
@@ -181,13 +181,21 @@ fn main() -> Result<(), Error> {
     let rsp: Response = client.post(url).body(body).send()?.json()?;
 
     match rsp {
-        Response::Error { error_msg } => return Err(err_msg(error_msg)),
-        Response::Paste { url } => {
-            println!("{}", url);
+        Response::Error { error_msg } => Err(err_msg(error_msg)),
+        Response::Paste { url } => Ok(url)
+    }
+}
+
+fn main() {
+    let options = Options::from_args();
+
+    match upload_paste(options) {
+        Ok(url) => println!("{}", url),
+        Err(e) => {
+            eprintln!("error: {}", e);
+            exit(1);
         }
     }
-
-    Ok(())
 }
 
 #[cfg(test)]
