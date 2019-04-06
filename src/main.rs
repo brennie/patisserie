@@ -182,7 +182,7 @@ fn upload_paste(options: Options) -> Result<String, Error> {
 
     match rsp {
         Response::Error { error_msg } => Err(err_msg(error_msg)),
-        Response::Paste { url } => Ok(url)
+        Response::Paste { url } => Ok(url),
     }
 }
 
